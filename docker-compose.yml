@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+  extrator:
+    build: .
+    volumes:
+      - ./dados_brutos:/app/dados_brutos
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    depends_on:
+      - minio
+    command: >
+      sh -c "
+        python extracao/api/api.py &&
+        python extracao/csv/csv.py &&
+        python extracao/database/database.py &&
+        python uploader/uploader.py
+      "
+
+volumes:
+  minio_data:

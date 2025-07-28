@@ -22,11 +22,11 @@ dados_filtrados = {
 }
 
 # Criar pasta se não existir
-pasta_raw_api = "data_lake/raw/api"
-os.makedirs(pasta_raw_api, exist_ok=True)
+pasta_dados_brutos = "dados_brutos"
+os.makedirs(pasta_dados_brutos, exist_ok=True)
 
 # Caminho do arquivo onde o JSON será salvo
-arquivo_json = os.path.join(pasta_raw_api, "ibm_global_quote.json")
+arquivo_json = os.path.join(pasta_dados_brutos, "ibm_global_quote.json")
 
 # Salvar os dados filtrados no arquivo
 with open(arquivo_json, 'w', encoding='utf-8') as f:

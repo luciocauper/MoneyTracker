@@ -8,10 +8,10 @@ dados_json_daily = resposta.json()
 print(dados_json_daily)
 dados_diarios = dados_json_daily.get("Time Series (Daily)", {})
 
-pasta_raw_sqlite = "data_lake/raw/sqlite"
-os.makedirs(pasta_raw_sqlite, exist_ok=True)
+pasta_dados_brutos = "dados_brutos"
+os.makedirs(pasta_dados_brutos, exist_ok=True)
 
-caminho_sqlite = os.path.join(pasta_raw_sqlite, 'ibm_dados_raw.db')
+caminho_sqlite = os.path.join(pasta_dados_brutos, 'ibm_dados_raw.db')
 conn = sqlite3.connect(caminho_sqlite)
 cursor = conn.cursor()
 
