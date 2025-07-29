@@ -37,31 +37,27 @@ services:
     environment:
       POSTGRES_DB: ibm_dw        # Nome do seu banco de dados
       POSTGRES_USER: user        # Usuário do banco de dados
-      POSTGRES_PASSWORD: password # Senha do banco de dados (use uma senha mais forte em produção!)
+      POSTGRES_PASSWORD: password # Senha do banco de dados 
     ports:
-      - "5432:5432" # Mapeia a porta 5432 do container para a porta 5432 da sua máquina
+      - "5432:5432" 
     volumes:
-      - pg_data:/var/lib/postgresql/data # Volume para persistir os dados do DB
+      - pg_data:/var/lib/postgresql/data 
 
-  # NOVO SERVIÇO: Loader de Dados para o Data Warehouse
+
   data_loader:
-    build: . # Reutiliza sua imagem Docker existente (com python e pandas)
+    build: . 
     volumes:
-      - ./dados_processados:/app/dados_processados # Mapeia a pasta com os dados transformados
+      - ./dados_processados:/app/dados_processados 
     environment:
-      PGHOST: db_warehouse    # Host do PostgreSQL (nome do serviço no docker-compose)
+      PGHOST: db_warehouse    
       PGUSER: user
       PGPASSWORD: password
       PGDATABASE: ibm_dw
     depends_on:
-      - db_warehouse # Garante que o banco de dados esteja funcionando antes de tentar carregar
-      # Você pode adicionar 'extrator' aqui se quiser que o 'data_loader' só rode depois de tudo
-      # ter sido extraído e processado por um pipeline completo (docker-compose up data_loader)
-      # ou pode rodá-lo separadamente depois de 'extrator' e 'processamento'
-    command: tail -f /dev/null # Mantém o container rodando para você poder executar comandos dentro dele depois
-    # ^^^ Nota: O comando acima é temporário. Você executará o script de carregamento manualmente dentro do container
-    # ou o adicionaremos aqui depois que o script estiver pronto e testado.
+      - db_warehouse 
+
+    command: tail -f /dev/null 
 
 volumes:
   minio_data:
-  pg_data: # Define o novo volume para o PostgreSQL
+  pg_data: 

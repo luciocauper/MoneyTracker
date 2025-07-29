@@ -4,7 +4,7 @@ import psycopg2
 import os
 from sqlalchemy import create_engine, text # Importa create_engine e text do SQLAlchemy
 
-# --- Configuração de Caminhos e Conexão com o PostgreSQL ---
+#Configuração de Caminhos e Conexão com o PostgreSQL
 processed_data_dir = '/app/dados_processados'
 
 DB_HOST = os.getenv('PGHOST', 'localhost')
@@ -16,10 +16,9 @@ DB_PORT = os.getenv('PGPORT', '5432')
 print(f"Tentando conectar ao PostgreSQL em: {DB_HOST}:{DB_PORT}/{DB_NAME} como {DB_USER}")
 
 def get_db_engine():
-    """Cria e retorna um SQLAlchemy engine para o banco de dados PostgreSQL."""
+    # Cria e retorna um SQLAlchemy engine para o banco de dados PostgreSQL.
     try:
         # Formato da string de conexão para SQLAlchemy:
-        # 'postgresql+psycopg2://user:password@host:port/database'
         engine_str = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
         engine = create_engine(engine_str)
         # Tenta conectar para verificar se a conexão é bem-sucedida
@@ -30,8 +29,8 @@ def get_db_engine():
         print(f"Erro ao criar SQLAlchemy Engine ou conectar ao PostgreSQL: {e}")
         raise
 
-def create_tables(engine): # Agora a função recebe o engine do SQLAlchemy
-    """Cria as tabelas no data warehouse se não existirem."""
+def create_tables(engine):
+    # Cria as tabelas no data warehouse se não existirem.
     with engine.connect() as conn: # Usa a conexão do engine
         # Tabela para dados de cotação global (ibm_global_quote)
         conn.execute(text("""
@@ -44,7 +43,7 @@ def create_tables(engine): # Agora a função recebe o engine do SQLAlchemy
                 low REAL,
                 volume BIGINT
             );
-        """)) # <<< Adicionado 'text()' aqui
+        """))
         print("Tabela 'ibm_global_quote' verificada/criada.")
 
         # Tabela para dados intraday (ibm_intraday)
@@ -57,7 +56,7 @@ def create_tables(engine): # Agora a função recebe o engine do SQLAlchemy
                 close REAL,
                 volume BIGINT
             );
-        """)) # <<< Adicionado 'text()' aqui
+        """))
         print("Tabela 'ibm_intraday' verificada/criada.")
 
         # Tabela para dados diários (ibm_daily)
@@ -69,31 +68,29 @@ def create_tables(engine): # Agora a função recebe o engine do SQLAlchemy
                 low REAL,
                 close REAL
             );
-        """)) # <<< Adicionado 'text()' aqui
+        """))
         print("Tabela 'ibm_daily' verificada/criada.")
         conn.commit() # Commita as criações de tabela
 
-def load_data_to_db(df, table_name, engine): # Agora a função recebe o engine
-    """Carrega um DataFrame para uma tabela específica no banco de dados."""
+def load_data_to_db(df, table_name, engine):
+    # Carrega um DataFrame para uma tabela específica no banco de dados.
     if df.empty:
         print(f"DataFrame para '{table_name}' está vazio, pulando carregamento.")
         return
 
     try:
-        # Pandas to_sql agora usa o engine do SQLAlchemy
         if table_name == 'ibm_global_quote':
             df.to_sql(table_name, engine, if_exists='replace', index=False)
         else:
-            # Ajusta tipos para PostgreSQL se necessário (e.g., Int64 para BigInt)
             for col in df.columns:
-                if str(df[col].dtype) == 'Int64': # Pandas nullable integer type
-                    df[col] = df[col].astype(int) # Convert to standard int for psycopg2
+                if str(df[col].dtype) == 'Int64':
+                    df[col] = df[col].astype(int)
 
             df.to_sql(table_name, engine, if_exists='append', index=False)
         print(f"Dados carregados para a tabela '{table_name}' com sucesso.")
     except Exception as e:
         print(f"Erro ao carregar dados para a tabela '{table_name}': {e}")
-        raise # Propaga o erro para o bloco try/except principal
+        raise
 
 if __name__ == "__main__":
     db_engine = None
