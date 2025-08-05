@@ -1,34 +1,39 @@
-# MoneyTracker/processamento/transformar_dados.py
 import pandas as pd
 import json
 import sqlite3
 import os
+import boto3
+from io import BytesIO
 
-# --- Configuração de Caminhos ---
-# Obtém o diretório do script atual (ex: MoneyTracker/processamento/)
+MINIO_ENDPOINT = 'http://localhost:9000'
+MINIO_ACCESS_KEY = 'minioadmin'         
+MINIO_SECRET_KEY = 'minioadmin'          
+BUCKET_NAME = 'raw'                      
+
+# Conexão com o MinIO (S3)
+s3 = boto3.client(
+    's3',
+    endpoint_url=MINIO_ENDPOINT,
+    aws_access_key_id=MINIO_ACCESS_KEY,
+    aws_secret_access_key=MINIO_SECRET_KEY,
+    region_name='us-east-1'
+)
+
+# Pasta de saída dos dados transformados
 current_script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Volta um nível para chegar à raiz do projeto (ex: MoneyTracker/)
-project_root = os.path.join(current_script_dir, os.pardir) # os.pardir é o mesmo que '..'
-
-# Define os caminhos completos para as pastas de dados
-raw_data_dir = os.path.join(project_root, 'dados_brutos')
+project_root = os.path.join(current_script_dir, os.pardir)
 processed_data_dir = os.path.join(project_root, 'dados_processados')
-
-# Garante que a pasta de saída de dados processados exista
 os.makedirs(processed_data_dir, exist_ok=True)
 
-# --- 1. Carregar e transformar ibm_global_quote.json ---
-json_file_path = os.path.join(raw_data_dir, 'ibm_global_quote.json')
-
-if os.path.exists(json_file_path):
-    with open(json_file_path, 'r', encoding='utf-8') as f:
-        global_quote_data = json.load(f)
+# ========== 1. ibm_global_quote.json ==========
+try:
+    obj = s3.get_object(Bucket=BUCKET_NAME, Key='ibm_global_quote.json')
+    content = obj['Body'].read()
+    global_quote_data = json.loads(content)
 
     df_global_quote = pd.DataFrame([global_quote_data])
-
-    # Convertendo tipos de dados
     df_global_quote['change_percent'] = df_global_quote['change_percent'].str.replace('%', '').astype(float)
+
     numeric_cols = ['price', 'open', 'high', 'low']
     for col in numeric_cols:
         df_global_quote[col] = pd.to_numeric(df_global_quote[col])
@@ -38,16 +43,19 @@ if os.path.exists(json_file_path):
     print(df_global_quote.info())
     print(df_global_quote.head())
     print("\n")
-else:
-    print(f"Aviso: Arquivo {json_file_path} não encontrado. Certifique-se de que o Victor o gerou rodando 'docker-compose up --build'.")
-    df_global_quote = pd.DataFrame() # Cria um DataFrame vazio se o arquivo não existir
 
+    df_global_quote.to_csv(os.path.join(processed_data_dir, 'ibm_global_quote_transformed.csv'), index=False)
+    print("Salvo: ibm_global_quote_transformed.csv")
 
-# --- 2. Carregar e transformar ibm_intraday.csv ---
-csv_intraday_path = os.path.join(raw_data_dir, 'ibm_intraday.csv')
+except Exception as e:
+    print(f"Erro ao acessar ibm_global_quote.json no MinIO: {e}")
+    df_global_quote = pd.DataFrame()
 
-if os.path.exists(csv_intraday_path):
-    df_intraday = pd.read_csv(csv_intraday_path)
+# ========== 2. ibm_intraday.csv ==========
+try:
+    obj = s3.get_object(Bucket=BUCKET_NAME, Key='ibm_intraday.csv')
+    content = obj['Body'].read()
+    df_intraday = pd.read_csv(BytesIO(content))
 
     df_intraday['timestamp'] = pd.to_datetime(df_intraday['timestamp'])
 
@@ -60,46 +68,42 @@ if os.path.exists(csv_intraday_path):
     print(df_intraday.info())
     print(df_intraday.head())
     print("\n")
-else:
-    print(f"Aviso: Arquivo {csv_intraday_path} não encontrado. Certifique-se de que o Victor o gerou rodando 'docker-compose up --build'.")
-    df_intraday = pd.DataFrame() # Cria um DataFrame vazio se o arquivo não existir
 
-
-# --- 3. Carregar e transformar ibm_dados_raw.db (SQLite) ---
-db_path = os.path.join(raw_data_dir, 'ibm_dados_raw.db')
-
-if os.path.exists(db_path):
-    try:
-        conn = sqlite3.connect(db_path)
-        df_daily = pd.read_sql_query("SELECT * FROM diario_ibm_extra", conn)
-        conn.close()
-
-        df_daily['timestamp'] = pd.to_datetime(df_daily['timestamp'])
-        numeric_cols_daily = ['open', 'high', 'low', 'close']
-        for col in numeric_cols_daily:
-            df_daily[col] = pd.to_numeric(df_daily[col])
-
-        print("--- Dados Transformados de ibm_dados_raw.db ---")
-        print(df_daily.info())
-        print(df_daily.head())
-        print("\n")
-
-    except Exception as e:
-        print(f"Erro ao carregar ou processar {db_path}: {e}")
-        df_daily = pd.DataFrame() # Cria um DataFrame vazio em caso de erro
-else:
-    print(f"Aviso: Arquivo de banco de dados {db_path} não encontrado. Certifique-se de que o Victor o gerou rodando 'docker-compose up --build'.")
-    df_daily = pd.DataFrame() # Cria um DataFrame vazio se o arquivo não existir
-
-# --- Salvar os DataFrames transformados em um formato intermediário (ex: CSV) ---
-if not df_global_quote.empty:
-    df_global_quote.to_csv(os.path.join(processed_data_dir, 'ibm_global_quote_transformed.csv'), index=False)
-    print(f"Dados globais transformados salvos em {os.path.join(processed_data_dir, 'ibm_global_quote_transformed.csv')}")
-
-if not df_intraday.empty:
     df_intraday.to_csv(os.path.join(processed_data_dir, 'ibm_intraday_transformed.csv'), index=False)
-    print(f"Dados intraday transformados salvos em {os.path.join(processed_data_dir, 'ibm_intraday_transformed.csv')}")
+    print("Salvo: ibm_intraday_transformed.csv")
 
-if not df_daily.empty:
+except Exception as e:
+    print(f"Erro ao acessar ibm_intraday.csv no MinIO: {e}")
+    df_intraday = pd.DataFrame()
+
+# ========== 3. ibm_dados_raw.db ==========
+try:
+    obj = s3.get_object(Bucket=BUCKET_NAME, Key='ibm_dados_raw.db')
+    content = obj['Body'].read()
+
+    # Salvar o arquivo temporariamente localmente
+    temp_db_path = os.path.join(project_root, 'temp_ibm_dados_raw.db')
+    with open(temp_db_path, 'wb') as f:
+        f.write(content)
+
+    conn = sqlite3.connect(temp_db_path)
+    df_daily = pd.read_sql_query("SELECT * FROM diario_ibm_extra", conn)
+    conn.close()
+    os.remove(temp_db_path)
+
+    df_daily['timestamp'] = pd.to_datetime(df_daily['timestamp'])
+    numeric_cols_daily = ['open', 'high', 'low', 'close']
+    for col in numeric_cols_daily:
+        df_daily[col] = pd.to_numeric(df_daily[col])
+
+    print("--- Dados Transformados de ibm_dados_raw.db ---")
+    print(df_daily.info())
+    print(df_daily.head())
+    print("\n")
+
     df_daily.to_csv(os.path.join(processed_data_dir, 'ibm_daily_transformed.csv'), index=False)
-    print(f"Dados diários transformados salvos em {os.path.join(processed_data_dir, 'ibm_daily_transformed.csv')}")
+    print("Salvo: ibm_daily_transformed.csv")
+
+except Exception as e:
+    print(f"Erro ao acessar ibm_dados_raw.db no MinIO: {e}")
+    df_daily = pd.DataFrame()
