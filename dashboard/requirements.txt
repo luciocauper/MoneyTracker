@@ -1,0 +1,4 @@
+streamlit>=1.18.0
+kafka-python
+pandas
+streamlit_autorefresh

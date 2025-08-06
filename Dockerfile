@@ -1,5 +1,5 @@
-# Imagem base
-FROM python
+# Imagem base específica e leve
+FROM python:3.11-slim
 
 # Diretório de trabalho
 WORKDIR /app
@@ -8,8 +8,7 @@ WORKDIR /app
 COPY . .
 
 # Instalar dependências
-RUN pip install requests minio pandas psycopg2-binary sqlalchemy boto3
+RUN pip install --no-cache-dir requests minio pandas psycopg2-binary sqlalchemy boto3
 
-
-# Comando padrão (substituível via docker-compose ou docker run)
+# Comando padrão
 CMD ["python", "extracao/api/api.py"]

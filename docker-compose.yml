@@ -14,7 +14,9 @@ services:
     command: server /data --console-address ":9001"
 
   extrator:
-    build: .
+    build:
+      context: ./extracao   # muda isso aqui pro caminho da pasta do Dockerfile
+      dockerfile: Dockerfile 
     volumes:
       - ./dados_brutos:/app/dados_brutos
     environment:
@@ -23,13 +25,13 @@ services:
       MINIO_SECRET_KEY: minioadmin
     depends_on:
       - minio
-    command: >
-      sh -c "
-        python extracao/api/api.py &&
-        python extracao/csv/csv.py &&
-        python extracao/database/database.py &&
-        python uploader/uploader.py
-      "
+    # command: >
+    #   sh -c "
+    #     python extracao/api/api.py &&
+    #     python extracao/csv/csv.py &&
+    #     python extracao/database/database.py &&
+    #     python uploader/uploader.py
+    #   "
 
   db_warehouse:
     image: postgres:13
@@ -43,7 +45,9 @@ services:
       - pg_data:/var/lib/postgresql/data 
 
   data_loader:
-    build: .
+    build:
+      context: ./load
+      dockerfile: Dockerfile
     volumes:
       - ./dados_processados:/app/dados_processados
     environment:
@@ -53,10 +57,12 @@ services:
       PGDATABASE: ibm_dw
     depends_on:
       - db_warehouse
-    command: tail -f /dev/null 
+    # command: tail -f /dev/null
 
   transformador:
-    build: .
+    build:
+      context: ./processamento
+      dockerfile: Dockerfile
     volumes:
       - ./dados_processados:/app/dados_processados
     environment:
@@ -70,7 +76,53 @@ services:
     depends_on:
       - minio
       - db_warehouse
-    command: python processamento/transformar_dados.py
+    # command: python processamento/transformar_dados.py
+
+  airflow:
+    build:
+      context: ./airflow
+    container_name: airflow
+    restart: always
+    depends_on:
+      - db_warehouse
+      - minio
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://user:password@db_warehouse:5432/ibm_dw
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_ENDPOINT: http://minio:9000
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/scripts:/opt/airflow/scripts
+      - ./dados_brutos:/opt/airflow/dados_brutos
+      - ./dados_processados:/opt/airflow/dados_processados
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+        airflow scheduler & airflow webserver
+      "
+
+  dashboard:
+    image: python:3.11-slim
+    working_dir: /app/dashboard
+    volumes:
+      - ./dados_processados:/app/dados_processados
+      - ./dashboard:/app/dashboard
+    ports:
+      - "8501:8501"
+    command: >
+      sh -c "pip install streamlit pandas altair streamlit-autorefresh &&
+            streamlit run /app/dashboard/app.py --server.port 8501 --server.address 0.0.0.0"
+    depends_on:
+      - db_warehouse
+      - minio
+
+
 
 volumes:
   minio_data:
